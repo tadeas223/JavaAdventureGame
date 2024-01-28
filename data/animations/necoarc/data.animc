@@ -1,0 +1,19 @@
+ANIMATIONS
+idle
+walkright
+walkleft
+END
+
+idle
+PATH "idle/"
+END
+
+walkright
+PATH "walk/"
+END
+
+
+walkleft
+PATH "walk/"
+FLIP X
+END
