@@ -1,218 +1,174 @@
 package world;
 
+import gameObject.GameObject;
+import gameObjects.Map;
+import gameObjects.Tile;
+import tools.CustomFileReader;
 import tools.FlipImage;
+import tools.Vector2Int;
 
-import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Scanner;
+import java.util.HashSet;
 
 public class MapLoader {
-    public static Map loadMap(String mapPath, String worldPath) {
-        String tilePath = "";
-        Tile[][] tiles;
-        String[][] tileMap = new String[0][0];
-        HashMap<Integer, Tile> basicTileSet = new HashMap<>();
-        HashMap<String, Tile> extendedTileSet = new HashMap<>();
+    public static Map loadMap(String path){
+        String sizeString = CustomFileReader.readSimpleValue(path,"SIZE");
+        String[] split = sizeString.split("x");
+        Vector2Int size = new Vector2Int(Integer.parseInt(split[0]),Integer.parseInt(split[1]));
 
-        ArrayList<String> lines = new ArrayList<>();
+        String[] map = CustomFileReader.readComplexValue(path,"MAP");
 
-        // loading tiles into a lines ArrayList
-//        System.out.println("loading tiles into a lines ArrayList");
-        try {
-            Scanner sc = new Scanner(new File(mapPath));
+        Tile[][] tileMap = new Tile[size.x][size.y];
 
-            while (sc.hasNextLine()) {
-                lines.add(sc.nextLine());
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        String tilePath = CustomFileReader.readSimpleValue(path,"TILE_PATH");
 
-        // loading the path to tiles that this map uses
-//        System.out.println("loading the path to tiles that this map uses");
-        for (String s : lines) {
-            if (s.contains("TILE_PATH")) {
-                String[] split1 = s.split(" ");
-                String[] split2 = split1[1].split("[+]");
+        if(tilePath.contains("WORLD_PATH")){
 
-                for (int i = 0; i < split2.length; i++) {
-                    if (split2[i].equals("WORLD_PATH")) {
-                        tilePath += worldPath;
-                    } else {
-                        tilePath += split2[i].split("\"")[1];
-                    }
+            String[] pathSplit = tilePath.split("[+]");
+            tilePath = "";
+            for (String s : pathSplit){
+                if(s.equals("WORLD_PATH")){
+                    s = CustomFileReader.readSimpleValue(path,"WORLD_PATH").split("\"")[1];
                 }
-                break;
+                String[] pathSplit2 = s.split("\"");
+                for(String s2 : pathSplit2){
+                    tilePath += s2;
+                }
             }
         }
+        HashMap<String,Tile> tiles = new HashMap<>();
 
-        // loading the map grid into a String[][]
-//        System.out.println("loading the map grid into a String[][]");
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).contains("MAP")) {
-                String[] split1 = lines.get(i).split(" ");
-                String[] split2 = split1[1].split("x");
+        HashSet<String> unhandledTiles = new HashSet<>();
 
-                tileMap = new String[Integer.parseInt(split2[0])][Integer.parseInt(split2[1])];
-
-                for (int y = 0; y < tileMap.length; y++) {
-                    String[] splitX = lines.get(y + i + 1).split(",");
-                    for (int x = 0; x < tileMap[0].length; x++) {
-                        tileMap[x][y] = splitX[x];
-                    }
+        for(int y = 0; y < size.y;y++){
+            String[] splitX = map[y].split(",");
+            for (int x = 0; x < size.x;x++) {
+                try{
+                    tiles.put(splitX[x],TileLoader.loadTile(tilePath + "/" + Integer.parseInt(splitX[x]) + ".png"));
+                } catch (NumberFormatException e){
+                    unhandledTiles.add(splitX[x]);
                 }
             }
         }
 
-        // loading BASIC_TILES into basicTileSet HashMap
-//        System.out.println("loading BASIC_TILES into basicTileSet HashMap");
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).contains("BASIC_TILES")) {
-                int j = i + 1;
-                while (!lines.get(j).contains("END")) {
-                    if (lines.get(j).contains("TILE")) {
-                        String[] split1 = lines.get(j).split(" ");
-                        Tile tile = new Tile();
+        int complexTilesLine = CustomFileReader.getValueLine(path,"COMPLEX_TILES");
+        for(String s : unhandledTiles){
+            int tileLine = complexTilesLine;
+            String[] lines = CustomFileReader.readLines(path);
+            while(!lines[tileLine].equals(s)){
+                tileLine++;
+                if(tileLine >= lines.length) {
+                    break;
+                }
+            }
 
-                        int tileId = Integer.parseInt(split1[1]);
+            int endLine = CustomFileReader.getValueLine(path,"END",tileLine);
+            String[] tileBuild = CustomFileReader.readComplexValue(path,"TILE_BUILD",tileLine,endLine);
 
-                        int k = j++;
+            ArrayList<BufferedImage> textures = new ArrayList<>();
 
-                        try {
-                            tile.setTexture(ImageIO.read(new File(tilePath + "/" + tileId + ".png")));
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
+            for(String s2 : tileBuild){
+                textures.add(TileLoader.loadTile(tilePath + "/" + s2 + ".png").getTexture());
+            }
+
+            Vector2Int textureSize = new Vector2Int(0,0);
+
+            for(BufferedImage tex : textures){
+                if(textureSize.x < tex.getWidth()){
+                    textureSize.x = tex.getWidth();
+                }
+                if(textureSize.y < tex.getHeight()){
+                    textureSize.y = tex.getHeight();
+                }
+            }
+
+            BufferedImage texture = new BufferedImage(textureSize.x,textureSize.y,BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2 = texture.createGraphics();
+            for(BufferedImage tex : textures){
+                g2.drawImage(tex,0,0,null);
+            }
+            g2.dispose();
+
+            String colliderTile = CustomFileReader.readSimpleValue(path,"COLLIDER_FROM");
+            Rectangle collider = null;
+            if(colliderTile != null){
+                collider = TileLoader.loadTile(tilePath + "/" + colliderTile + ".png").getCollider();
+            }
+
+            Tile tile = new Tile(texture,collider);
+
+            String flip = CustomFileReader.readSimpleValue(path,"FLIP",tileLine);
+            if(flip != null){
+                if(flip.equals("X")){
+                    tile.setTexture(FlipImage.flipX(tile.getTexture()));
+                }
+                else if(flip.equals("Y")){
+                    tile.setTexture(FlipImage.flipY(tile.getTexture()));
+                }
+            }
+
+
+            tiles.put(s,tile);
+        }
+
+        for(int y = 0; y < size.y;y++){
+            String[] splitX = map[y].split(",");
+            for (int x = 0; x < size.x;x++) {
+                tileMap[x][y] = new Tile(tiles.get(splitX[x]));
+            }
+        }
+
+        Map finalMap = new Map(tileMap);
+
+
+        int objectsLine = CustomFileReader.getValueLine(path,"OBJECTS");
+        objectsLine+= 1;
+        String[] lines = CustomFileReader.readLines(path);
+
+        for(int i = objectsLine; i < lines.length;i++){
+            if(lines[i].contains("OBJECT")){
+
+                String className = lines[i].split(" ")[1];
+                try{
+                    Class objClass = Class.forName(className);
+                    GameObject obj = (GameObject) objClass.getDeclaredConstructor().newInstance();
+
+                    int positonLine = CustomFileReader.getValueLine(path,"POSITION",i,true);
+
+                    int j = positonLine;
+
+                    ArrayList<String> position = new ArrayList<>();
+
+                    if(j!=-1){
+                        while (!lines[j].equals("END")){
+                            position.add(lines[j]);
+                            j++;
                         }
-
-                        while (!lines.get(k).contains("END")) {
-                            if (lines.get(k).contains("FLIP")) {
-                                String orientation = lines.get(k).split(" ")[1];
-                                if (orientation.equals("X")) {
-                                    tile.setTexture(FlipImage.flipX(tile.getTexture()));
-                                }
-                                if (orientation.equals("Y")) {
-                                    tile.setTexture(FlipImage.flipY(tile.getTexture()));
-                                }
-                            }
-                            if (lines.get(k).contains("COLLISION")) {
-                                int l = k + 1;
-                                Rectangle collider = new Rectangle();
-                                while (!lines.get(l).contains("END")) {
-                                    if (lines.get(l).contains("X")) {
-                                        collider.x = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    if (lines.get(l).contains("Y")) {
-                                        collider.y = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    if (lines.get(l).contains("WIDTH")) {
-                                        collider.width = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    if (lines.get(l).contains("HEIGHT")) {
-                                        collider.height = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    l++;
-                                }
-                                tile.setCollider(collider);
-                            }
-                            k++;
-                        }
-
-                        basicTileSet.put(tileId, tile);
                     }
 
-                    j++;
-                }
-                break;
-            }
-        }
+                    Vector2Int pos = new Vector2Int(0,0);
 
-        // loading EXTENDED_TILES into extendedTileSet HashMap
-//        System.out.println("loading EXTENDED_TILES into extendedTileSet HashMap");
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).contains("EXTENDED_TILES")) {
-                int j = i + 1;
-
-                while (!lines.get(j).contains("END")) {
-
-                    if (lines.get(j).contains("TILE")) {
-                        String tileName = lines.get(j).split(" ")[1];
-
-                        int k = j++;
-                        Tile tile = null;
-
-                        while (!lines.get(k).contains("END")) {
-                            if (lines.get(k).contains("BASIC_TILE")) {
-                                int basicTileId = Integer.parseInt(lines.get(k).split(" ")[1]);
-
-                                tile = new Tile(basicTileSet.get(basicTileId));
-                            }
-                            k++;
+                    for(String s : position){
+                        if(s.contains("X")){
+                            pos.x = Integer.parseInt(s.split(" ")[1]);
                         }
-
-                        k = 0;
-
-                        Rectangle collider = null;
-
-                        while (!lines.get(k).contains("END")) {
-                            if (lines.get(k).contains("FLIP")) {
-                                String orientation = lines.get(k).split(" ")[1];
-                                if (orientation.equals("X")) {
-                                    tile.setTexture(FlipImage.flipX(tile.getTexture()));
-                                }
-                                if (orientation.equals("Y")) {
-                                    tile.setTexture(FlipImage.flipY(tile.getTexture()));
-                                }
-                            }
-                            if (lines.get(k).contains("COLLISION")) {
-                                int l = k + 1;
-                                collider = new Rectangle();
-                                while (!lines.get(l).contains("END")) {
-                                    if (lines.get(l).contains("X")) {
-                                        collider.x = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    if (lines.get(l).contains("Y")) {
-                                        collider.y = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    if (lines.get(l).contains("WIDTH")) {
-                                        collider.width = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    if (lines.get(l).contains("HEIGHT")) {
-                                        collider.height = Integer.parseInt(lines.get(l).split(" ")[1]);
-                                    }
-                                    l++;
-                                }
-                            }
-                            k++;
+                        if(s.contains("Y")){
+                            pos.y = Integer.parseInt(s.split(" ")[1]);
                         }
-
-                        extendedTileSet.put(tileName, tile);
                     }
-                    j++;
+
+                    finalMap.addGameObject(obj,pos);
+                } catch (ClassNotFoundException | InstantiationException | IllegalAccessException |
+                         NoSuchMethodException | InvocationTargetException e){
+                    throw new RuntimeException(e);
                 }
             }
         }
 
-        //building the map based on the basic and extended tile sets
-//        System.out.println("building the map based on the basic and extended tile sets");
-        tiles = new Tile[tileMap.length][tileMap[0].length];
-
-        for (int y = 0; y < tiles.length; y++) {
-            for (int x = 0; x < tiles[0].length; x++) {
-                try {
-                    tiles[x][y] = basicTileSet.get(Integer.parseInt(tileMap[x][y]));
-                } catch (NumberFormatException e) {
-                    tiles[x][y] = extendedTileSet.get(tileMap[x][y]);
-                }
-            }
-        }
-
-        // construction map object and returning it
-//        System.out.println("construction map object and returning it");
-        return new Map(tiles);
+        return finalMap;
     }
 }

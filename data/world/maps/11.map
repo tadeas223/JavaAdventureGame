@@ -1,0 +1,20 @@
+WORLD_PATH "data/world"
+TILE_PATH WORLD_PATH+"/tiles"
+
+SIZE 1x1
+MAP
+0
+END
+
+OBJECTS
+
+OBJECT gameObjects.YouWin
+POSITION
+X 0
+Y 0
+END
+END
+
+END
+
+COMPLEX_TILES

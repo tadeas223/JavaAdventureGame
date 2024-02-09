@@ -1,82 +1,35 @@
 package world;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import gameObjects.Map;
+import gameObjects.World;
+import tools.CustomFileReader;
+
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Scanner;
+import java.util.HashSet;
 
 public class WorldLoader {
-    public World loadWorld(String path) {
-        String tilePath = "";
-        Tile[][] tiles;
-        String[][] tileMap = new String[0][0];
-        HashMap<String,Tile> tileHashMap = new HashMap<>();
+    public static World loadWorld(String path){
+        String mapsPath = CustomFileReader.readSimpleValue(path+"/data.world","MAPS_PATH");
+        mapsPath = mapsPath.split("\"")[1];
 
-        ArrayList<String> lines = new ArrayList<>();
+        String[] mapsString = CustomFileReader.readComplexValue(path+"/data.world","MAPS");
+        String[] linkersString = CustomFileReader.readComplexValue(path+"/data.world","LINKERS");
 
-        try{
-            Scanner sc = new Scanner(new File(path + "/data.world"));
+        HashMap<Integer, Map> maps = new HashMap<>();
 
-            while(sc.hasNextLine()){
-                lines.add(sc.nextLine());
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        for(String s : mapsString){
+            maps.put(Integer.parseInt(s),MapLoader.loadMap(path+"/"+mapsPath+"/"+s+".map"));
         }
 
-        for(String s : lines){
-            if(s.contains("TILE_PATH")){
-                String[] split1 = s.split(" ");
-                String[] split2 = split1[1].split("[+]");
+        for(String s : linkersString){
+            String[] split = s.split(",");
+            Linker linker = new Linker(maps.get(Integer.parseInt(split[1])),
+                    split[2].charAt(0));
 
-                for(int i = 0; i < split2.length;i++){
-                    if(split2[i].equals("WORLD_PATH")){
-                        tilePath += path;
-                    }
-                    else{
-                        tilePath += split2[i];
-                    }
-                }
-                break;
-            }
-        }
+            maps.get(Integer.parseInt(split[0])).addLinker(linker);}
 
-        for(int i = 0; i < lines.size();i++){
-            if(lines.get(i).contains("MAP")){
-                String[] split1 = lines.get(i).split(" ");
-                String[] split2 = split1[1].split("x");
-
-                tileMap = new String[Integer.parseInt(split2[0])][Integer.parseInt(split2[1])];
-
-                for(int y = i; y < tileMap.length+i;y++){
-                    String[] splitX = lines.get(y).split(",");
-                    for(int x = 0; x < tileMap[0].length;x++){
-                        tileMap[x][y] = splitX[x];
-                    }
-                }
-            }
-        }
-
-        for(int y = 0; y < tileMap.length;y++){
-            for(int x = 0; x < tileMap[0].length;x++){
-                for(String s : lines){
-                    if(s.equals(tileMap[x][y])){
-                        try{
-                            int tileNum = Integer.parseInt(s);
-                            if(tileHashMap.get(String.valueOf(tileNum)) == null){
-
-                            }
-
-                        }catch (NumberFormatException e){
-
-                        }
-                    }
-
-                }
-            }
-        }
-        return null;
+        Map currentMap = maps.get(Integer.parseInt(CustomFileReader.readSimpleValue(path+"/data.world","INITIAL_MAP")));
+        return new World(currentMap);
     }
 }

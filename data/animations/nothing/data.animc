@@ -1,0 +1,7 @@
+ANIMATIONS
+rotate
+END
+
+rotate
+PATH "rotate/"
+END

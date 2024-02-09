@@ -1,4 +1,6 @@
 ANIMATIONS
+dance
+dance2
 idle
 walkright
 walkleft
@@ -8,12 +10,20 @@ idle
 PATH "idle/"
 END
 
+dance
+PATH "dance/"
+END
+
+dance2
+PATH "dance2/"
+END
+
 walkright
 PATH "walk/"
+FLIP X
 END
 
 
 walkleft
 PATH "walk/"
-FLIP X
 END
